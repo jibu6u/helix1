@@ -1,307 +1,206 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="utf-8" />
-<title>WebXR 양안 + 다이콥틱 템포럴 모듈레이션 (이중 나선)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>7점 캡처 → 폐곡선 → 실행 (Oculus OK)</title>
 <style>
-  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,Segoe UI,Arial}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font:14px/1.4 system-ui,Segoe UI,Arial}
+  canvas{display:block;touch-action:none}
   #ui{
-    position:fixed;left:10px;top:10px;z-index:10;min-width:300px;
-    background:rgba(0,0,0,.6);color:#fff;border-radius:12px;padding:12px 12px 10px
+    position:fixed;left:10px;top:10px;z-index:10;min-width:260px;
+    background:rgba(0,0,0,.65);color:#fff;border-radius:12px;padding:12px
   }
   #ui h3{margin:.2rem 0 .4rem;font-size:15px}
-  #ui .grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
-  #ui label{display:flex;justify-content:space-between;align-items:center;gap:.6rem;margin:.35rem 0}
-  #ui input[type="range"], #ui input[type="number"]{width:140px}
-  #ui button{width:100%;margin-top:.35rem;border:0;border-radius:8px;padding:.45rem .6rem;cursor:pointer;background:#1f6cff;color:#fff}
+  #ui button{width:100%;margin-top:.35rem;border:0;border-radius:9px;padding:.5rem .6rem;cursor:pointer}
+  #apply{background:#1f6cff;color:#fff;opacity:.5;pointer-events:none}
+  #reset{background:#444;color:#fff}
   #hint{font-size:12px;opacity:.85;margin-top:.4rem}
+  #panel{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.55);color:#fff;border-radius:12px;padding:10px;display:none}
+  #panel label{display:flex;justify-content:space-between;gap:.6rem;margin:.25rem 0}
+  #panel input[type=range]{width:140px}
 </style>
 </head>
 <body>
+<canvas id="cv"></canvas>
+
 <div id="ui">
-  <h3>VR · 장면</h3>
-  <label>파동 강도 <input id="warp" type="range" min="0" max="1.5" step="0.01" value="1.0"></label>
-  <label>파동 속도 <input id="wSpeed" type="range" min="0" max="2.5" step="0.01" value="1.1"></label>
-  <label>나선 밀도(턴) <input id="turns" type="range" min="1" max="12" step="0.1" value="5.0"></label>
-  <label>나선 분리폭 <input id="sep" type="range" min="0" max="0.6" step="0.01" value="0.28"></label>
-  <label>나선 속도 <input id="hSpeed" type="range" min="0" max="2.5" step="0.01" value="0.8"></label>
-  <div class="grid">
-    <label>시계색 <input id="c1" type="color" value="#00d1ff"></label>
-    <label>반시계색 <input id="c2" type="color" value="#ff4dd2"></label>
-  </div>
-
-  <h3 style="margin-top:.6rem">다이콥틱 템포럴 모듈레이션</h3>
-  <div><b>왼쪽 눈</b></div>
-  <label>주파수(Hz) <input id="lHz" type="number" min="0" step="0.1" value="8"></label>
-  <label>듀티(%) <input id="lDuty" type="range" min="0" max="100" step="1" value="50"></label>
-  <label>지속(s) <input id="lDur" type="number" min="0" step="0.1" value="5"></label>
-  <label>깜빡임 횟수 <input id="lCount" type="number" min="0" step="1" value="0"></label>
-  <div class="grid">
-    <button id="lStart">왼쪽 시작</button>
-    <button id="lStop"  style="background:#555">왼쪽 정지</button>
-  </div>
-
-  <div style="margin-top:.4rem"><b>오른쪽 눈</b></div>
-  <label>주파수(Hz) <input id="rHz" type="number" min="0" step="0.1" value="12"></label>
-  <label>듀티(%) <input id="rDuty" type="range" min="0" max="100" step="1" value="50"></label>
-  <label>지속(s) <input id="rDur" type="number" min="0" step="0.1" value="5"></label>
-  <label>깜빡임 횟수 <input id="rCount" type="number" min="0" step="1" value="0"></label>
-  <div class="grid">
-    <button id="rStart">오른쪽 시작</button>
-    <button id="rStop"  style="background:#555">오른쪽 정지</button>
-  </div>
-
-  <div id="hint">VR 버튼을 눌러 들어간 뒤, 고개를 살짝 움직이며 깊이를 확인해 보세요.<br>
-  * 횟수=0 이면 ‘지속시간 동안 지정 Hz로’ 계속 깜빡임. 횟수&gt;0이면 ‘횟수 기준’으로 종료.</div>
+  <h3>① 화면을 탭/클릭해 <b>7점</b>을 찍으세요</h3>
+  <div>• 큰 히트영역으로 부드럽게 찍힙니다<br>• 잘못 찍으면 <b>두 손가락 탭</b>(또는 우클릭)으로 <b>되돌리기</b></div>
+  <button id="reset">모두 지우기</button>
+  <button id="apply">② 적용(실행)</button>
+  <div id="hint">7점이 모두 찍히면 적용 버튼이 활성화됩니다.</div>
 </div>
 
-<script type="module">
-import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-import { VRButton } from "https://unpkg.com/three@0.160.0/examples/jsm/webxr/VRButton.js";
+<div id="panel">
+  <h3>애니메이션(실행 후)</h3>
+  <label>링 개수 <input id="rings" type="range" min="200" max="1600" step="10" value="900"></label>
+  <label>링 간격 <input id="gap" type="range" min="1.5" max="10" step="0.1" value="3.2"></label>
+  <label>왜곡 진폭 <input id="warp" type="range" min="0" max="60" step="1" value="24"></label>
+  <label>로브 수 <input id="lobes" type="range" min="1" max="10" step="1" value="4"></label>
+  <label>속도 <input id="speed" type="range" min="0" max="6" step="0.1" value="2.2"></label>
+</div>
 
-///////////////////////////
-// 기본 WebXR 셋업
-///////////////////////////
-const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
-renderer.xr.enabled = true;
-document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+<script>
+const cvs = document.getElementById('cv'), ctx = cvs.getContext('2d',{alpha:false});
+let W=innerWidth, H=innerHeight; cvs.width=W; cvs.height=H;
+addEventListener('resize', ()=>{W=innerWidth;H=innerHeight;cvs.width=W;cvs.height=H;draw();});
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.01, 100);
-camera.position.set(0, 1.6, 1.2); // 사용자 눈 높이 근처
+// 점 상태
+const PTS=[]; const HIT=20; // 터치 히트 반경(px)
+let running=false;
 
-addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+// 유틸
+function getPos(e){
+  const r=cvs.getBoundingClientRect();
+  const cx = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
+  const cy = (e.touches? e.touches[0].clientY : e.clientY) - r.top;
+  return {x:cx,y:cy};
+}
+function draw(){
+  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
+  // 보조 그리드(살짝)
+  ctx.globalAlpha=0.15; ctx.strokeStyle="#0ff"; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(let x=0;x<W;x+=40){ctx.moveTo(x,0);ctx.lineTo(x,H);}
+  for(let y=0;y<H;y+=40){ctx.moveTo(0,y);ctx.lineTo(W,y);}
+  ctx.stroke(); ctx.globalAlpha=1;
 
-///////////////////////////
-// 조명 & 참조
-///////////////////////////
-scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-
-///////////////////////////
-// 배경 평면 파동 (셰이더)
-///////////////////////////
-const planeGeo = new THREE.PlaneGeometry(6, 6, 1, 1);
-const planeMat = new THREE.ShaderMaterial({
-  transparent:false,
-  uniforms:{
-    uTime:{value:0},
-    uWarp:{value:1.0},
-    uSpeed:{value:1.1},
-    uCenter:{value:new THREE.Vector2(0.0, 0.0)},
-    uPaletteA:{value:new THREE.Color(0x90ee90)},
-    uPaletteB:{value:new THREE.Color(0x4169e1)},
-    uPaletteC:{value:new THREE.Color(0xffd700)}
-  },
-  vertexShader:/*glsl*/`
-    varying vec2 vUv;
-    void main(){
-      vUv = uv*2.0-1.0;               // [-1,1] 좌표
-      vec4 mv = modelViewMatrix * vec4(position,1.0);
-      gl_Position = projectionMatrix * mv;
-    }
-  `,
-  fragmentShader:/*glsl*/`
-    precision highp float;
-    varying vec2 vUv;
-    uniform float uTime, uWarp, uSpeed;
-    uniform vec2 uCenter;
-    uniform vec3 uPaletteA, uPaletteB, uPaletteC;
-
-    // 간단한 팔레트 보간
-    vec3 palette(float t){
-      return mix(mix(uPaletteA,uPaletteB, smoothstep(0.0,0.5,t)),
-                 uPaletteC, smoothstep(0.5,1.0,t));
-    }
-    void main(){
-      vec2 p = vUv - uCenter;
-      float r = length(p);
-      float a = atan(p.y,p.x);
-
-      float w = 60.0;                        // 링 밀도
-      float phase = uTime * uSpeed;
-      float lobes = 4.0;
-      float war = uWarp * 0.25 * sin(lobes*a + a*0.25 + phase*0.9);
-      float rings = sin( (r+war) * w - phase*6.0 );
-
-      float t = 0.5 + 0.5*rings;
-      vec3 col = palette(t);
-      // 살짝 감산 혼합 느낌
-      col *= 0.9 + 0.1*cos(6.2831*r + phase);
-
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `
-});
-const plane = new THREE.Mesh(planeGeo, planeMat);
-plane.position.set(0, 1.6, -2.0);
-scene.add(plane);
-
-///////////////////////////
-// 이중 나선 (3D 깊이)
-///////////////////////////
-const helixGroup = new THREE.Group();
-scene.add(helixGroup);
-
-function makeHelix({clockwise=true, color=0x00d1ff}){
-  const points = [];
-  const turns = +document.getElementById('turns').value;
-  const height = 2.6;            // 세로 길이
-  const radius = 0.45;           // 기본 반경
-  const sep = +document.getElementById('sep').value; // 분리폭(반경 방향이 아닌 접선 방향)
-  const steps = 1200;
-
-  for(let i=0;i<=steps;i++){
-    const t = i/steps;
-    const ang = (clockwise? +1 : -1) * (turns*2*Math.PI*t);
-    const r = radius;
-    const x = Math.cos(ang)*r;
-    const z = Math.sin(ang)*r;
-    const y = 1.1 + (t-0.5)*height;
-
-    // 접선 방향으로 분리
-    const nx = -Math.sin(ang), nz = Math.cos(ang);
-    const off = (clockwise? +sep : -sep);
-    points.push(new THREE.Vector3(x + nx*off, y, z + nz*off));
+  // 선
+  if(PTS.length>0){
+    ctx.strokeStyle="#ffea00"; ctx.lineWidth=2.2; ctx.beginPath();
+    ctx.moveTo(PTS[0].x,PTS[0].y);
+    for(let i=1;i<PTS.length;i++) ctx.lineTo(PTS[i].x,PTS[i].y);
+    // 7개면 폐곡선
+    if(PTS.length===7){ ctx.lineTo(PTS[0].x,PTS[0].y); }
+    ctx.stroke();
   }
-
-  const curve = new THREE.CatmullRomCurve3(points);
-  const tube = new THREE.TubeGeometry(curve, 1000, 0.008, 8, false);
-  const mat  = new THREE.MeshStandardMaterial({color, metalness:0.1, roughness:0.3});
-  const mesh = new THREE.Mesh(tube, mat);
-  return mesh;
-}
-
-// 초기 생성
-let helixCW  = makeHelix({clockwise:true,  color:0x00d1ff});
-let helixCCW = makeHelix({clockwise:false, color:0xff4dd2});
-helixGroup.add(helixCW, helixCCW);
-
-// UI 값 변화에 따라 재생성
-function rebuildHelix(){
-  helixGroup.clear();
-  helixCW  = makeHelix({clockwise:true,  color:new THREE.Color(document.getElementById('c1').value)});
-  helixCCW = makeHelix({clockwise:false, color:new THREE.Color(document.getElementById('c2').value)});
-  helixGroup.add(helixCW, helixCCW);
-}
-['turns','sep','c1','c2'].forEach(id=>document.getElementById(id).addEventListener('input', rebuildHelix));
-
-///////////////////////////
-// 다이콥틱 템포럴 모듈레이션
-///////////////////////////
-// 아이디어: 카메라에 붙인 '투명 패널(레이어별)'을 좌/우 눈에 따로 렌더.
-// 알파=0 ↔ 완전 투명(통과), 알파=1 ↔ 완전 검정(차단) → 밝기 깜빡임.
-const leftShutter  = makeShutter(1);  // 레이어 1: 왼쪽
-const rightShutter = makeShutter(2);  // 레이어 2: 오른쪽
-camera.add(leftShutter);
-camera.add(rightShutter);
-scene.add(camera);
-
-// 카메라 하위에 고정(헤드-고정)
-function makeShutter(layerIndex){
-  const g = new THREE.PlaneGeometry(2.5, 2.5);
-  const m = new THREE.MeshBasicMaterial({color:0x000000, transparent:true, opacity:0.0});
-  const mesh = new THREE.Mesh(g,m);
-  mesh.position.set(0,0,-0.08); // 눈 앞에 아주 얕게
-  mesh.renderOrder = 999;
-  mesh.layers.set(layerIndex);
-  return mesh;
-}
-
-// 레이어 가시성 설정: 좌/우 카메라에 레이어 연결
-renderer.xr.addEventListener('sessionstart', ()=>{
-  const xrCam = renderer.xr.getCamera(camera);
-  if (xrCam.isArrayCamera && xrCam.cameras.length>=2){
-    const camL = xrCam.cameras[0], camR = xrCam.cameras[1];
-    camL.layers.enable(1); camL.layers.disable(2);
-    camR.layers.enable(2); camR.layers.disable(1);
-    // 공통 컨텐츠 레이어 0은 기본 활성
+  // 점
+  for(let i=0;i<PTS.length;i++){
+    const p=PTS[i];
+    ctx.fillStyle="#ffee66"; ctx.beginPath(); ctx.arc(p.x,p.y,6,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#222"; ctx.lineWidth=1; ctx.stroke();
   }
-});
+}
 
-// 깜빡임 제어 상태
-const mod = {
-  L:{active:false, start:0, dur:5, hz:8, duty:0.5, count:0, toggles:0},
-  R:{active:false, start:0, dur:5, hz:12, duty:0.5, count:0, toggles:0}
+function addPoint(x,y){
+  if(PTS.length>=7) return;
+  PTS.push({x,y});
+  draw();
+  if(PTS.length===7){
+    // 적용 버튼 활성
+    const btn=document.getElementById('apply');
+    btn.style.opacity=1; btn.style.pointerEvents='auto';
+  }
+}
+
+function undo(){
+  if(running) return;
+  if(PTS.length>0){
+    PTS.pop();
+    const btn=document.getElementById('apply');
+    btn.style.opacity = (PTS.length===7)?1:.5;
+    btn.style.pointerEvents = (PTS.length===7)?'auto':'none';
+    draw();
+  }
+}
+
+// 입력(터치/마우스)
+cvs.addEventListener('pointerdown', (e)=>{ if(running) return; const {x,y}=getPos(e); addPoint(x,y); });
+cvs.addEventListener('contextmenu', (e)=>{e.preventDefault();undo();});
+cvs.addEventListener('touchstart', (e)=>{
+  // 두 손가락 탭 → 되돌리기
+  if(e.touches.length===2){ e.preventDefault(); undo(); return; }
+  if(e.touches.length===1){ const {x,y}=getPos(e); addPoint(x,y); }
+},{passive:false});
+
+// 버튼
+document.getElementById('reset').onclick=()=>{
+  if(running)return;
+  PTS.length=0; draw();
+  const btn=document.getElementById('apply');
+  btn.style.opacity=.5; btn.style.pointerEvents='none';
 };
-function startEye(which){
-  const hz   = +document.getElementById(which+'Hz').value;
-  const duty = (+document.getElementById(which+'Duty').value)/100;
-  const dur  = +document.getElementById(which+'Dur').value;
-  const cnt  = +document.getElementById(which+'Count').value;
 
-  Object.assign(mod[which.toUpperCase()], {active:true, start:performance.now()/1000, hz, duty, dur, count:cnt, toggles:0});
+// ===== 실행(간단한 평면 파동 + 이중나선 느낌의 2D 오버레이) =====
+const panel = document.getElementById('panel');
+document.getElementById('apply').onclick=()=>{
+  if(PTS.length!==7 || running) return;
+  running=true; panel.style.display='block';
+  animateStart();
+};
+
+const COLORS=["#32cd32","#00ff7f","#9acd32","#ffff00","#ffd700","#f0e68c","#9370db","#8a2be2","#ba55d3","#1e90ff","#87cefa","#ff6347","#ff4500"];
+function rng(seed){return ()=> (seed = Math.imul(seed^seed>>>15, 1|seed)) >>> 0 / 4294967296;}
+function seedFromPts(){
+  let s=0; for(let i=0;i<PTS.length;i++){ s ^= ((PTS[i].x|0)<<16) ^ (PTS[i].y|0) ^ (i*2654435761>>>0); }
+  return (s>>>0) || 0x9e3779b9;
 }
-function stopEye(which){
-  mod[which.toUpperCase()].active=false;
-  (which==='l'?leftShutter:rightShutter).material.opacity=0.0;
-}
-document.getElementById('lStart').onclick = ()=>startEye('l');
-document.getElementById('rStart').onclick = ()=>startEye('r');
-document.getElementById('lStop').onclick  = ()=>stopEye('l');
-document.getElementById('rStop').onclick  = ()=>stopEye('r');
 
-///////////////////////////
-// 애니메이션 루프
-///////////////////////////
-renderer.setAnimationLoop((t)=>{
-  const time = t*0.001;
-  planeMat.uniforms.uTime.value = time;
-  planeMat.uniforms.uWarp.value = +document.getElementById('warp').value;
-  planeMat.uniforms.uSpeed.value= +document.getElementById('wSpeed').value;
+let t0=performance.now();
+function animateStart(){ requestAnimationFrame(loop); }
+function loop(t){
+  // 파라미터
+  const rings=+ringsEl.value, gap=+gapEl.value, warp=+warpEl.value, lobes=+lobesEl.value, spd=+speedEl.value;
+  const cx=PTS.reduce((s,p)=>s+p.x,0)/7, cy=PTS.reduce((s,p)=>s+p.y,0)/7;
 
-  // 나선 상승/회전
-  const speed = +document.getElementById('hSpeed').value;
-  helixGroup.rotation.y = time*0.25;
-  helixGroup.position.z = -1.2 - 0.15*Math.sin(time*speed);
-  helixGroup.position.y = 1.6 + 0.05*Math.sin(time*speed*1.3);
+  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
 
-  // 좌/우 깜빡임 적용
-  updateShutter('L', leftShutter.material, time);
-  updateShutter('R', rightShutter.material, time);
+  // 배경 원형 파동(촘촘)
+  const time=(t-t0)*0.001, phase=time*spd, rot=time*0.15;
+  const maxR=Math.hypot(Math.max(cx,W-cx), Math.max(cy,H-cy))+30;
+  const stepBase=(angR)=> 2*Math.PI/(260+Math.min(360,Math.round(angR)));
 
-  renderer.render(scene, camera);
-});
-
-function updateShutter(key, mat, now){
-  const s = mod[key];
-  if(!s.active){ mat.opacity = 0.0; return; }
-
-  const elapsed = now - s.start;
-  // 종료 조건: 지속시간 또는 횟수
-  if (s.dur>0 && elapsed >= s.dur){ s.active=false; mat.opacity=0.0; return; }
-  if (s.count>0){
-    // on/off 하나를 toggle 1회로 계산 → 목표 toggles = count*2
-    if (s.toggles >= s.count*2){ s.active=false; mat.opacity=0.0; return; }
+  const rnd=rng(seedFromPts());
+  for(let i=0;i<rings;i++){
+    const baseR = i*gap + (phase*gap);
+    if(baseR>maxR+gap) break;
+    ctx.strokeStyle = COLORS[(rnd()*COLORS.length)|0];
+    ctx.lineWidth=0.8; ctx.beginPath();
+    const offset=rnd()*Math.PI*2;
+    const st=stepBase(baseR);
+    let first=true;
+    for(let th=0;th<2*Math.PI+st;th+=st){
+      const a=th+rot;
+      const war = warp*Math.sin(lobes*a + a*0.22 + offset + phase*0.9);
+      const rr=baseR+war;
+      const x=cx+Math.cos(a)*rr, y=cy+Math.sin(a)*rr;
+      if(first){ctx.moveTo(x,y);first=false;} else ctx.lineTo(x,y);
+    }
+    ctx.closePath(); ctx.stroke();
   }
 
-  if (s.hz<=0){ mat.opacity=0.0; return; }
+  // 이중나선 2D 오버레이(시계/반시계)
+  function drawStrand(clockwise,color,sep=36){
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+    const steps=1400;
+    for(let i=0;i<=steps;i++){
+      const s=i/steps, r=s*maxR;
+      const theta=(clockwise?+1:-1)*2*Math.PI*(4.0*s) + (clockwise?+1:-1)*time*1.6 + (clockwise?0:Math.PI);
+      const war = 0.9*warp*Math.sin(lobes*theta + theta*0.22);
+      const rr=r+war;
+      const nx=-Math.sin(theta), ny=Math.cos(theta);
+      const dx=nx*(clockwise? +sep/2 : -sep/2);
+      const dy=ny*(clockwise? +sep/2 : -sep/2);
+      const x=cx+Math.cos(theta)*rr+dx, y=cy+Math.sin(theta)*rr+dy;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  drawStrand(true,"#00d1ff"); drawStrand(false,"#ff4dd2");
 
-  const period = 1.0/s.hz;
-  const phase  = (elapsed % period) / period;  // 0~1
-  const on = phase < s.duty;                   // 듀티 사이클
-
-  // toggle 카운트(경계 통과 감지)
-  const prevPhase = ((elapsed - renderer.xr.getFrame().getDelta()/1000) % period + period) % period;
-  if ((prevPhase < s.duty) !== on){ s.toggles++; }
-
-  // on → 암전(1.0), off → 투명(0.0)
-  // 필요하면 반대로 하고 싶을 땐 아래 두 값 바꾸기
-  mat.opacity = on ? 1.0 : 0.0;
+  requestAnimationFrame(loop);
 }
 
-///////////////////////////
-// UI → 셰이더/지오메트리 반영
-///////////////////////////
-['warp','wSpeed'].forEach(id=>document.getElementById(id).addEventListener('input', ()=>{}));
+// 슬라이더 참조
+const ringsEl = document.getElementById('rings');
+const gapEl   = document.getElementById('gap');
+const warpEl  = document.getElementById('warp');
+const lobesEl = document.getElementById('lobes');
+const speedEl = document.getElementById('speed');
 
+// 초기 화면
+draw();
 </script>
 </body>
 </html>
