@@ -1,205 +1,130 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
+<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>7점 캡처 → 폐곡선 → 실행 (Oculus OK)</title>
+<title>7점 → 폐곡선 → 실행 (안정版)</title>
 <style>
-  html,body{margin:0;height:100%;background:#000;overflow:hidden;font:14px/1.4 system-ui,Segoe UI,Arial}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font:14px system-ui,Segoe UI,Arial}
   canvas{display:block;touch-action:none}
-  #ui{
-    position:fixed;left:10px;top:10px;z-index:10;min-width:260px;
-    background:rgba(0,0,0,.65);color:#fff;border-radius:12px;padding:12px
+  .hud{
+    position:fixed;left:10px;top:10px;z-index:10;
+    background:rgba(0,0,0,.65);color:#fff;border-radius:12px;padding:10px 12px;min-width:220px
   }
-  #ui h3{margin:.2rem 0 .4rem;font-size:15px}
-  #ui button{width:100%;margin-top:.35rem;border:0;border-radius:9px;padding:.5rem .6rem;cursor:pointer}
-  #apply{background:#1f6cff;color:#fff;opacity:.5;pointer-events:none}
+  .hud h3{margin:.1rem 0 .4rem;font-size:15px}
+  .btn{width:100%;margin-top:.4rem;border:0;border-radius:8px;padding:.5rem .6rem;cursor:pointer}
+  #start{background:#1f6cff;color:#fff;opacity:.5;pointer-events:none}
   #reset{background:#444;color:#fff}
-  #hint{font-size:12px;opacity:.85;margin-top:.4rem}
-  #panel{position:fixed;right:10px;top:10px;z-index:10;background:rgba(0,0,0,.55);color:#fff;border-radius:12px;padding:10px;display:none}
-  #panel label{display:flex;justify-content:space-between;gap:.6rem;margin:.25rem 0}
-  #panel input[type=range]{width:140px}
+  #status{font-size:12px;opacity:.9;margin-top:.3rem}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 
-<div id="ui">
+<div class="hud">
   <h3>① 화면을 탭/클릭해 <b>7점</b>을 찍으세요</h3>
-  <div>• 큰 히트영역으로 부드럽게 찍힙니다<br>• 잘못 찍으면 <b>두 손가락 탭</b>(또는 우클릭)으로 <b>되돌리기</b></div>
-  <button id="reset">모두 지우기</button>
-  <button id="apply">② 적용(실행)</button>
-  <div id="hint">7점이 모두 찍히면 적용 버튼이 활성화됩니다.</div>
-</div>
-
-<div id="panel">
-  <h3>애니메이션(실행 후)</h3>
-  <label>링 개수 <input id="rings" type="range" min="200" max="1600" step="10" value="900"></label>
-  <label>링 간격 <input id="gap" type="range" min="1.5" max="10" step="0.1" value="3.2"></label>
-  <label>왜곡 진폭 <input id="warp" type="range" min="0" max="60" step="1" value="24"></label>
-  <label>로브 수 <input id="lobes" type="range" min="1" max="10" step="1" value="4"></label>
-  <label>속도 <input id="speed" type="range" min="0" max="6" step="0.1" value="2.2"></label>
+  <div>• 실수하면 <b>두 손가락 탭</b>(또는 우클릭)으로 <b>되돌리기</b></div>
+  <button id="reset" class="btn">모두 지우기</button>
+  <button id="start" class="btn">② 실행</button>
+  <div id="status">0 / 7</div>
 </div>
 
 <script>
-const cvs = document.getElementById('cv'), ctx = cvs.getContext('2d',{alpha:false});
+const cvs = document.getElementById('cv');
+const ctx = cvs.getContext('2d', {alpha:false});
 let W=innerWidth, H=innerHeight; cvs.width=W; cvs.height=H;
 addEventListener('resize', ()=>{W=innerWidth;H=innerHeight;cvs.width=W;cvs.height=H;draw();});
 
-// 점 상태
-const PTS=[]; const HIT=20; // 터치 히트 반경(px)
+const pts=[];             // {x,y} 7개
 let running=false;
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('start');
 
-// 유틸
+// --- 입력: 포인터/터치 모두 매끄럽게 ---
 function getPos(e){
   const r=cvs.getBoundingClientRect();
-  const cx = (e.touches? e.touches[0].clientX : e.clientX) - r.left;
-  const cy = (e.touches? e.touches[0].clientY : e.clientY) - r.top;
-  return {x:cx,y:cy};
+  const c = (e.touches? e.touches[0] : e);
+  return {x: c.clientX - r.left, y: c.clientY - r.top};
 }
+function addPoint(p){
+  if(running||pts.length>=7) return;
+  pts.push(p);
+  if(pts.length===7){ startBtn.style.opacity=1; startBtn.style.pointerEvents='auto'; }
+  statusEl.textContent = `${pts.length} / 7`;
+  draw();
+}
+function undo(){
+  if(running||pts.length===0) return;
+  pts.pop();
+  if(pts.length<7){ startBtn.style.opacity=.5; startBtn.style.pointerEvents='none'; }
+  statusEl.textContent = `${pts.length} / 7`;
+  draw();
+}
+
+cvs.addEventListener('pointerdown', e=>{ addPoint(getPos(e)); });
+cvs.addEventListener('contextmenu', e=>{ e.preventDefault(); undo(); });
+cvs.addEventListener('touchstart', e=>{
+  if(e.touches.length===2){ e.preventDefault(); undo(); return; }
+  if(e.touches.length===1){ addPoint(getPos(e)); }
+},{passive:false});
+
+document.getElementById('reset').onclick=()=>{ if(running) return; pts.length=0; startBtn.style.opacity=.5; startBtn.style.pointerEvents='none'; statusEl.textContent='0 / 7'; draw(); };
+
+// --- 그리기: 점 + 선(폐곡선) ---
 function draw(){
   ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
-  // 보조 그리드(살짝)
-  ctx.globalAlpha=0.15; ctx.strokeStyle="#0ff"; ctx.lineWidth=1;
-  ctx.beginPath();
-  for(let x=0;x<W;x+=40){ctx.moveTo(x,0);ctx.lineTo(x,H);}
-  for(let y=0;y<H;y+=40){ctx.moveTo(0,y);ctx.lineTo(W,y);}
-  ctx.stroke(); ctx.globalAlpha=1;
 
-  // 선
-  if(PTS.length>0){
+  // 연결선
+  if(pts.length>0){
     ctx.strokeStyle="#ffea00"; ctx.lineWidth=2.2; ctx.beginPath();
-    ctx.moveTo(PTS[0].x,PTS[0].y);
-    for(let i=1;i<PTS.length;i++) ctx.lineTo(PTS[i].x,PTS[i].y);
-    // 7개면 폐곡선
-    if(PTS.length===7){ ctx.lineTo(PTS[0].x,PTS[0].y); }
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    if(pts.length===7) ctx.lineTo(pts[0].x, pts[0].y); // 마지막→처음
     ctx.stroke();
   }
   // 점
-  for(let i=0;i<PTS.length;i++){
-    const p=PTS[i];
+  for(const p of pts){
     ctx.fillStyle="#ffee66"; ctx.beginPath(); ctx.arc(p.x,p.y,6,0,Math.PI*2); ctx.fill();
     ctx.strokeStyle="#222"; ctx.lineWidth=1; ctx.stroke();
   }
 }
 
-function addPoint(x,y){
-  if(PTS.length>=7) return;
-  PTS.push({x,y});
-  draw();
-  if(PTS.length===7){
-    // 적용 버튼 활성
-    const btn=document.getElementById('apply');
-    btn.style.opacity=1; btn.style.pointerEvents='auto';
-  }
-}
+// --- 실행: 간단한 원형 파동 애니메이션(확실히 보이는 버전) ---
+startBtn.onclick=()=>{
+  if(pts.length!==7 || running) return;
+  running=true;
+  const cx = pts.reduce((s,p)=>s+p.x,0)/7, cy = pts.reduce((s,p)=>s+p.y,0)/7;
+  let t0=performance.now();
+  requestAnimationFrame(function loop(t){
+    if(!running) return;
+    const time=(t-t0)*0.001;
+    ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
 
-function undo(){
-  if(running) return;
-  if(PTS.length>0){
-    PTS.pop();
-    const btn=document.getElementById('apply');
-    btn.style.opacity = (PTS.length===7)?1:.5;
-    btn.style.pointerEvents = (PTS.length===7)?'auto':'none';
-    draw();
-  }
-}
+    // 배경 링
+    const maxR=Math.hypot(Math.max(cx,W-cx), Math.max(cy,H-cy))+20;
+    for(let i=0;i<1200;i++){
+      const baseR=i*3.2 + time*6; if(baseR>maxR) break;
+      const lobes=4, war=22*Math.sin(lobes*0.02*i + time*2.0);
+      const r=baseR+war;
+      ctx.strokeStyle=`hsl(${(i*7)%360} 90% 55%)`;
+      ctx.lineWidth=0.7; ctx.beginPath();
+      for(let a=0;a<=Math.PI*2+0.02;a+=0.02){
+        const x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+        if(a===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
 
-// 입력(터치/마우스)
-cvs.addEventListener('pointerdown', (e)=>{ if(running) return; const {x,y}=getPos(e); addPoint(x,y); });
-cvs.addEventListener('contextmenu', (e)=>{e.preventDefault();undo();});
-cvs.addEventListener('touchstart', (e)=>{
-  // 두 손가락 탭 → 되돌리기
-  if(e.touches.length===2){ e.preventDefault(); undo(); return; }
-  if(e.touches.length===1){ const {x,y}=getPos(e); addPoint(x,y); }
-},{passive:false});
+    // 7각형 윤곽(살짝 빛나게)
+    ctx.strokeStyle="rgba(255,234,0,.9)"; ctx.lineWidth=2.4; ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for(let i=1;i<7;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.lineTo(pts[0].x, pts[0].y); ctx.stroke();
 
-// 버튼
-document.getElementById('reset').onclick=()=>{
-  if(running)return;
-  PTS.length=0; draw();
-  const btn=document.getElementById('apply');
-  btn.style.opacity=.5; btn.style.pointerEvents='none';
+    requestAnimationFrame(loop);
+  });
 };
 
-// ===== 실행(간단한 평면 파동 + 이중나선 느낌의 2D 오버레이) =====
-const panel = document.getElementById('panel');
-document.getElementById('apply').onclick=()=>{
-  if(PTS.length!==7 || running) return;
-  running=true; panel.style.display='block';
-  animateStart();
-};
-
-const COLORS=["#32cd32","#00ff7f","#9acd32","#ffff00","#ffd700","#f0e68c","#9370db","#8a2be2","#ba55d3","#1e90ff","#87cefa","#ff6347","#ff4500"];
-function rng(seed){return ()=> (seed = Math.imul(seed^seed>>>15, 1|seed)) >>> 0 / 4294967296;}
-function seedFromPts(){
-  let s=0; for(let i=0;i<PTS.length;i++){ s ^= ((PTS[i].x|0)<<16) ^ (PTS[i].y|0) ^ (i*2654435761>>>0); }
-  return (s>>>0) || 0x9e3779b9;
-}
-
-let t0=performance.now();
-function animateStart(){ requestAnimationFrame(loop); }
-function loop(t){
-  // 파라미터
-  const rings=+ringsEl.value, gap=+gapEl.value, warp=+warpEl.value, lobes=+lobesEl.value, spd=+speedEl.value;
-  const cx=PTS.reduce((s,p)=>s+p.x,0)/7, cy=PTS.reduce((s,p)=>s+p.y,0)/7;
-
-  ctx.fillStyle="#000"; ctx.fillRect(0,0,W,H);
-
-  // 배경 원형 파동(촘촘)
-  const time=(t-t0)*0.001, phase=time*spd, rot=time*0.15;
-  const maxR=Math.hypot(Math.max(cx,W-cx), Math.max(cy,H-cy))+30;
-  const stepBase=(angR)=> 2*Math.PI/(260+Math.min(360,Math.round(angR)));
-
-  const rnd=rng(seedFromPts());
-  for(let i=0;i<rings;i++){
-    const baseR = i*gap + (phase*gap);
-    if(baseR>maxR+gap) break;
-    ctx.strokeStyle = COLORS[(rnd()*COLORS.length)|0];
-    ctx.lineWidth=0.8; ctx.beginPath();
-    const offset=rnd()*Math.PI*2;
-    const st=stepBase(baseR);
-    let first=true;
-    for(let th=0;th<2*Math.PI+st;th+=st){
-      const a=th+rot;
-      const war = warp*Math.sin(lobes*a + a*0.22 + offset + phase*0.9);
-      const rr=baseR+war;
-      const x=cx+Math.cos(a)*rr, y=cy+Math.sin(a)*rr;
-      if(first){ctx.moveTo(x,y);first=false;} else ctx.lineTo(x,y);
-    }
-    ctx.closePath(); ctx.stroke();
-  }
-
-  // 이중나선 2D 오버레이(시계/반시계)
-  function drawStrand(clockwise,color,sep=36){
-    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
-    const steps=1400;
-    for(let i=0;i<=steps;i++){
-      const s=i/steps, r=s*maxR;
-      const theta=(clockwise?+1:-1)*2*Math.PI*(4.0*s) + (clockwise?+1:-1)*time*1.6 + (clockwise?0:Math.PI);
-      const war = 0.9*warp*Math.sin(lobes*theta + theta*0.22);
-      const rr=r+war;
-      const nx=-Math.sin(theta), ny=Math.cos(theta);
-      const dx=nx*(clockwise? +sep/2 : -sep/2);
-      const dy=ny*(clockwise? +sep/2 : -sep/2);
-      const x=cx+Math.cos(theta)*rr+dx, y=cy+Math.sin(theta)*rr+dy;
-      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
-  }
-  drawStrand(true,"#00d1ff"); drawStrand(false,"#ff4dd2");
-
-  requestAnimationFrame(loop);
-}
-
-// 슬라이더 참조
-const ringsEl = document.getElementById('rings');
-const gapEl   = document.getElementById('gap');
-const warpEl  = document.getElementById('warp');
-const lobesEl = document.getElementById('lobes');
-const speedEl = document.getElementById('speed');
-
-// 초기 화면
 draw();
 </script>
 </body>
